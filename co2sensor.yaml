@@ -1,25 +1,35 @@
 substitutions:
   node_name: !env_var co2ampel 
+
 esphome:
     name: co2ampel_${node_name}
     platform: ESP32
     board: esp32doit-devkit-v1 
     on_boot:
                - display.page.show: boot
+    platformio_options:
+        lib_deps: NeoPixelBus@2.6.0, AsyncTCP-esphome, ESPAsyncTCP-esphome, AsyncTCP-esphome, AsyncMqttClient-esphome, ESPAsyncTCP-esphome, AsyncTCP-esphome, ArduinoJson-esphomelib@5.13.3, ESPAsyncWebServer-esphome
+
+
 ota:
   safe_mode: True
-  password: !secret ota_passwd 
+  password: "" 
 
 
 logger:
     level: DEBUG
 wifi:
-    ssid: !secret wifi_ssid
-    password: !secret wifi_passwd
+    networks:
+      - ssid: !secret wifi1_ssid
+        password: !secret wifi1_passwd
+      - ssid: !secret wifi2_ssid
+        password: !secret wifi2_passwd
     ap:
      ssid: "co2ampel"
      password: ""
+
 captive_portal:
+
 mqtt:
   broker: co2.cyber23.de
   topic_prefix: co2ampel/${node_name}
@@ -31,7 +41,7 @@ mqtt:
    payload: offline
 
 uart:
-  rx_pin: GPIO16 
+  rx_pin: GPIO16
   tx_pin: GPIO17
   baud_rate: 9600
   id: uart_mhz19
@@ -39,7 +49,7 @@ uart:
 light:
   - platform: neopixelbus
     pin: GPIO4
-    num_leds: 12
+    num_leds: 8
     name: "ws2812 ring"
     id: "ws2812"
     restore_mode: ALWAYS_OFF
@@ -52,7 +62,7 @@ output:
 sensor:
   - platform: mhz19
     update_interval: 10s
-    automatic_baseline_calibration: true 
+    automatic_baseline_calibration: true
     uart_id: uart_mhz19
     temperature:
       name: ${node_name} Temperature
@@ -60,76 +70,91 @@ sensor:
     co2:
       name: ${node_name} PPM
       id: mhz19_co2
-      on_value:
-       then:
-          if:
-           condition:
-                 sensor.in_range:
-                  id: mhz19_co2 
-                  above: 0
-                  below: 800
-           then:
-            - light.turn_off:
+      
+interval:
+  - interval: 10s
+    then:
+      if:
+        condition:
+           sensor.in_range:
+             id: mhz19_co2 
+             above: 0
+             below: 800
+        then:
+           - light.turn_off:
                id: ws2812
-            - display.page.show: co2
-           else:
-                if:
+           - display.page.show: co2
+        else:
+          if:
+            condition:
+              sensor.in_range:
+                id: mhz19_co2
+                above: 800
+                below: 1000
+            then:
+               - light.turn_on:
+                   id: ws2812
+                   brightness: 80%
+                   red: 50%
+                   green: 50%
+                   blue: 0%
+               - display.page.show: co2
+            else:
+               if:
                  condition:
-                  sensor.in_range:
-                   id: mhz19_co2
-                   above: 800
-                   below: 1000
+                   sensor.in_range:
+                     id: mhz19_co2
+                     above: 1000
                  then:
-                     - light.turn_on:
-                        id: ws2812
-                        brightness: 80%
-                        red: 50%
-                        green: 50%
-                        blue: 0%
-                     - display.page.show: co2
-                 else:
-                         if:
-                                 condition:
-                                         sensor.in_range:
-                                                 id: mhz19_co2
-                                                 above: 1000
-                                 then:
-                                         - light.turn_on:
-                                                 id: ws2812
-                                                 brightness: 100%
-                                                 red: 100%
-                                                 green: 0%
-                                                 blue: 0%
-                                       # - output.turn_on: buzzer
-                                       # - output.ledc.set_frequency:
-                                       #    id: buzzer
-                                       #    frequency: "5000Hz"
-                                       # - output.set_level:
-                                       #    id: buzzer
-                                       #    level: "20%"
-                                       # - delay: 10ms
-                                       # - output.turn_off: buzzer
-                                         - delay: 500ms
-                                         - light.toggle: ws2812
-                                         - delay: 500ms
-                                         - light.toggle: ws2812
-                                         - delay: 500ms
-                                         - light.toggle: ws2812
-                                         - delay: 500ms
-                                         - light.toggle: ws2812
-                                         - lambda: |-
-                                            static int num_executions = 0;
-                                            ESP_LOGD("main", "I am at execution number %d", num_executions);
-                                            num_executions += 1;
-                                         - display.page.show: co2   
+                   - light.turn_on:
+                       id: ws2812
+                       brightness: 100%
+                       red: 100%
+                       green: 0%
+                       blue: 0%
+                   - output.turn_on: buzzer
+                   - output.ledc.set_frequency:
+                       id: buzzer
+                       frequency: "5000Hz"
+                   - output.set_level:
+                      id: buzzer
+                      level: "20%"
+                   - delay: 10ms
+                   - output.turn_off: buzzer
+                   - delay: 500ms
+                   - light.toggle: ws2812
+                   - delay: 500ms
+                   - light.toggle: ws2812
+                   - delay: 500ms
+                   - light.toggle: ws2812
+                   - delay: 500ms
+                   - light.toggle: ws2812
+                   - lambda: |-
+                      static int num_executions = 0;
+                      ESP_LOGD("main", "I am at execution number %d", num_executions);
+                      num_executions += 1;
+                   - display.page.show: co2   
 i2c:
   sda: GPIO21 
   scl: GPIO22
 
+time:
+  - platform: sntp
+    id: esptime
+    timezone: DE/Berlin
+
 font:
   - file: "font.ttf"
-    id: cust_font
-    size: 70
+    id: big_font
+    size: 30
+
+  - file: "font.ttf"
+    id: smallsize_font
+    size: 15
+
+  - file: "font.ttf"
+    id: midsize_font
+    size: 22
 
 display:
   - platform: ssd1306_i2c
@@ -140,11 +165,15 @@ display:
     pages:
             - id: boot
               lambda: |-
-                      it.printf(64, 0, id(cust_font), COLOR_ON, TextAlign::TOP_CENTER, ":-)");
+                it.printf(64, 15, id(big_font), COLOR_ON, TextAlign::TOP_CENTER, ":-)");
             - id: co2
               lambda: |-
-               int ergb;
-               ergb = id(mhz19_co2).state/100;
-               it.printf(64, 0, id(cust_font), COLOR_ON, TextAlign::TOP_CENTER, "%.0i", ergb);
-#               it.printf(64, 16, id(cust_font), COLOR_ON, TextAlign::TOP_CENTER, "%.0fPPM", id(mhz19_co2).state);
-#            it.printf(64, 40, id(cust_font),TextAlign::TOP_CENTER, "%.0f°C", id(mhz19_temp).state);
+                int ergb;
+                ergb = id(mhz19_co2).state/100;
+                it.strftime(128, 0, id(smallsize_font), TextAlign::RIGHT, "%H:%M", id(esptime).now());
+                it.strftime(0, 0, id(smallsize_font), TextAlign::LEFT, "%d.%m.", id(esptime).now());
+                it.printf(64, 12, id(big_font), TextAlign::TOP_CENTER, "%.0f", id(mhz19_co2).state);
+                it.printf(99, 26, id(smallsize_font), TextAlign::LEFT, "ppm");
+                it.printf(64, 40, id(midsize_font), TextAlign::TOP_CENTER, "%.0f", id(mhz19_temp).state);
+                it.printf(99, 45, id(smallsize_font), TextAlign::LEFT, "°C");
+#                it.printf(64, 0, id(big_font), COLOR_ON, TextAlign::TOP_CENTER, "%.0i", ergb);
